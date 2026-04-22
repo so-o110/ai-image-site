@@ -1,55 +1,58 @@
-const samplePosts = [
-  {
-    id: 1,
-    title: "Anime Girl",
-    imageUrl:
-      "https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=1200&auto=format&fit=crop",
-    tags: ["anime", "portrait", "cute"],
-  },
-  {
-    id: 2,
-    title: "Cyber City",
-    imageUrl:
-      "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=1200&auto=format&fit=crop",
-    tags: ["cyberpunk", "city", "night"],
-  },
-  {
-    id: 3,
-    title: "Fantasy World",
-    imageUrl:
-      "https://images.unsplash.com/photo-1511300636408-a63a89df3482?q=80&w=1200&auto=format&fit=crop",
-    tags: ["fantasy", "art", "dreamy"],
-  },
-];
+import { supabase } from "@/lib/supabase";
+import PostForm from "@/app/components/PostForm";
 
-export default function Home() {
+export const dynamic = "force-dynamic";
+
+type Post = {
+  id: string;
+  title: string;
+  image_url: string;
+  tags: string;
+  prompt: string;
+};
+
+export default async function Home() {
+  const { data: posts, error } = await supabase
+    .from("posts")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    return (
+      <main className="min-h-screen p-8">
+        <h1 className="text-3xl font-bold">AI Image Site</h1>
+        <p className="mt-4 text-red-500">データ取得エラー: {error.message}</p>
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-gray-100 p-8">
-      <h1 className="mb-2 text-3xl font-bold text-black">AI Image Site</h1>
-      <p className="mb-8 text-gray-600">AI画像を見やすくまとめるサイト</p>
+      <h1 className="text-3xl font-bold text-black">AI Image Site</h1>
+      <p className="mb-8 text-gray-600">
+        AI画像とプロンプトを見やすくまとめるサイト
+      </p>
+
+      <PostForm />
 
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {samplePosts.map((post) => (
-          <div
-            key={post.id}
-            className="overflow-hidden rounded-2xl bg-white shadow"
-          >
+        {posts?.map((post: Post) => (
+          <div key={post.id} className="overflow-hidden rounded-2xl bg-white shadow">
             <img
-              src={post.imageUrl}
+              src={post.image_url}
               alt={post.title}
               className="h-64 w-full object-cover"
             />
+
             <div className="p-4">
-              <h2 className="text-lg font-semibold text-black">{post.title}</h2>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {post.tags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="rounded-full bg-gray-200 px-3 py-1 text-sm text-gray-700"
-                  >
-                    #{tag}
-                  </span>
-                ))}
+              <h2 className="text-lg font-bold text-black">{post.title}</h2>
+              <p className="mt-2 text-sm text-gray-500">{post.tags}</p>
+
+              <div className="mt-4 rounded-lg bg-gray-100 p-3">
+                <p className="mb-1 text-sm font-semibold text-black">Prompt</p>
+                <p className="text-sm text-gray-700 whitespace-pre-wrap break-words">
+                  {post.prompt}
+                </p>
               </div>
             </div>
           </div>
