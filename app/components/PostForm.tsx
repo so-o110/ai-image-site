@@ -1,204 +1,213 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 
-export default function PostForm() {
-  const router = useRouter();
+type PostFormProps = {
+  userId: string;
+  onPostCreated: () => Promise<void>;
+};
 
+export default function PostForm({ userId, onPostCreated }: PostFormProps) {
   const [title, setTitle] = useState("");
   const [tags, setTags] = useState("");
   const [prompt, setPrompt] = useState("");
-  const [file, setFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState("");
-
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
-
-  const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
-  const ALLOWED_TYPES = [
-    "image/png",
-    "image/jpeg",
-    "image/jpg",
-    "image/webp",
-  ];
-
-  useEffect(() => {
-    if (!file) {
-      setPreviewUrl("");
-      return;
-    }
-
-    const objectUrl = URL.createObjectURL(file);
-    setPreviewUrl(objectUrl);
-
-    return () => URL.revokeObjectURL(objectUrl);
-  }, [file]);
-
-  const resetForm = () => {
-    setTitle("");
-    setTags("");
-    setPrompt("");
-    setFile(null);
-    setPreviewUrl("");
-  };
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    setMessage("");
 
-    if (!file) {
-      setMessage("画像を選択してください");
-      setLoading(false);
+    if (!title.trim()) {
+      alert("タイトルを入力してください。");
       return;
     }
 
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      setMessage("PNG / JPG / JPEG / WEBP 形式の画像のみ投稿できます");
-      setLoading(false);
+    if (!tags.trim()) {
+      alert("タグを入力してください。");
       return;
     }
 
-    if (file.size > MAX_FILE_SIZE) {
-      setMessage("画像サイズは5MB以下にしてください");
-      setLoading(false);
+    if (!prompt.trim()) {
+      alert("プロンプトを入力してください。");
       return;
     }
 
-    const ext = file.name.split(".").pop()?.toLowerCase() || "png";
-    const fileName = `${Date.now()}-${Math.random()
-      .toString(36)
-      .slice(2)}.${ext}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from("images")
-      .upload(fileName, file, {
-        contentType: file.type,
-      });
-
-    if (uploadError) {
-      setMessage("アップロード失敗: " + uploadError.message);
-      setLoading(false);
+    if (!imageFile) {
+      alert("画像を選択してください。");
       return;
     }
 
-    const { data: publicUrlData } = supabase.storage
-      .from("images")
-      .getPublicUrl(fileName);
-
-    const imageUrl = publicUrlData.publicUrl;
-
-    const { error: insertError } = await supabase.from("posts").insert([
-      {
-        title,
-        tags,
-        prompt,
-        image_url: imageUrl,
-      },
-    ]);
-
-    if (insertError) {
-      setMessage("投稿失敗: " + insertError.message);
-      setLoading(false);
+    const allowedTypes = ["image/png", "image/jpeg", "image/jpg", "image/webp"];
+    if (!allowedTypes.includes(imageFile.type)) {
+      alert("PNG / JPG / JPEG / WEBP の画像だけアップロードできます。");
       return;
     }
 
-    setMessage("投稿しました");
-    resetForm();
-    router.refresh();
-    setLoading(false);
+    const maxSize = 5 * 1024 * 1024;
+    if (imageFile.size > maxSize) {
+      alert("画像サイズは5MB以下にしてください。");
+      return;
+    }
+
+    setUploading(true);
+
+    try {
+      const fileExt = imageFile.name.split(".").pop();
+      const fileName = `${userId}/${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2)}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("image")
+        .upload(fileName, imageFile);
+
+      if (uploadError) {
+        alert(`画像のアップロードに失敗しました: ${uploadError.message}`);
+        return;
+      }
+
+      const { data: publicUrlData } = supabase.storage
+        .from("image")
+        .getPublicUrl(fileName);
+
+      const imageUrl = publicUrlData.publicUrl;
+
+      const { error: insertError } = await supabase.from("posts").insert([
+        {
+          title: title.trim(),
+          tags: tags.trim(),
+          prompt: prompt.trim(),
+          image_url: imageUrl,
+          user_id: userId,
+        },
+      ]);
+
+      if (insertError) {
+        alert(`投稿の保存に失敗しました: ${insertError.message}`);
+        return;
+      }
+
+      setTitle("");
+      setTags("");
+      setPrompt("");
+      setImageFile(null);
+
+      const fileInput = document.getElementById("image") as HTMLInputElement | null;
+      if (fileInput) {
+        fileInput.value = "";
+      }
+
+      await onPostCreated();
+      alert("投稿できました。");
+    } catch (error) {
+      console.error(error);
+      alert("エラーが発生しました。");
+    } finally {
+      setUploading(false);
+    }
   };
 
   return (
     <form
       onSubmit={handleSubmit}
-      className="mb-8 rounded-2xl bg-white p-6 shadow"
+      style={{
+        border: "1px solid #ddd",
+        borderRadius: "12px",
+        padding: "20px",
+        marginBottom: "32px",
+        backgroundColor: "#fff",
+      }}
     >
-      <h2 className="mb-4 text-xl font-bold text-black">新しい投稿</h2>
+      <h2 style={{ fontSize: "22px", fontWeight: "bold", marginBottom: "16px" }}>
+        新しい投稿
+      </h2>
 
-      <div className="mb-4">
-        <label className="mb-1 block text-sm font-medium text-black">
+      <div style={{ marginBottom: "16px" }}>
+        <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>
           タイトル
         </label>
         <input
           type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          className="w-full rounded-lg border px-3 py-2 text-black"
           placeholder="例: 幻想の街"
-          required
+          style={{
+            width: "100%",
+            padding: "10px",
+            border: "1px solid #ccc",
+            borderRadius: "8px",
+          }}
         />
       </div>
 
-      <div className="mb-4">
-        <label className="mb-1 block text-sm font-medium text-black">
+      <div style={{ marginBottom: "16px" }}>
+        <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>
           タグ
         </label>
         <input
           type="text"
           value={tags}
           onChange={(e) => setTags(e.target.value)}
-          className="w-full rounded-lg border px-3 py-2 text-black"
           placeholder="例: fantasy, city, night"
-          required
+          style={{
+            width: "100%",
+            padding: "10px",
+            border: "1px solid #ccc",
+            borderRadius: "8px",
+          }}
         />
       </div>
 
-      <div className="mb-4">
-        <label className="mb-1 block text-sm font-medium text-black">
+      <div style={{ marginBottom: "16px" }}>
+        <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>
           プロンプト
         </label>
         <textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
-          className="w-full rounded-lg border px-3 py-2 text-black"
           rows={5}
           placeholder="例: masterpiece, best quality, fantasy city, cinematic lighting..."
-          required
+          style={{
+            width: "100%",
+            padding: "10px",
+            border: "1px solid #ccc",
+            borderRadius: "8px",
+          }}
         />
       </div>
 
-      <div className="mb-4">
-        <label className="mb-1 block text-sm font-medium text-black">
+      <div style={{ marginBottom: "16px" }}>
+        <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>
           画像（PNG / JPG / JPEG / WEBP、5MB以下）
         </label>
         <input
+          id="image"
           type="file"
-          accept="image/png,image/jpeg,image/webp"
+          accept="image/png,image/jpeg,image/jpg,image/webp"
           onChange={(e) => {
             if (e.target.files && e.target.files.length > 0) {
-              const selectedFile = e.target.files[0];
-              setFile(selectedFile);
-              setMessage("");
+              setImageFile(e.target.files[0]);
             }
           }}
-          className="w-full text-black"
-          required
         />
       </div>
 
-      {previewUrl && (
-        <div className="mb-4">
-          <p className="mb-2 text-sm font-medium text-black">プレビュー</p>
-          <img
-            src={previewUrl}
-            alt="preview"
-            className="h-64 w-full rounded-lg object-cover border"
-          />
-        </div>
-      )}
-
       <button
         type="submit"
-        disabled={loading}
-        className="rounded-lg bg-black px-4 py-2 text-white disabled:opacity-50"
+        disabled={uploading}
+        style={{
+          padding: "12px 20px",
+          borderRadius: "8px",
+          border: "none",
+          backgroundColor: uploading ? "#999" : "#111",
+          color: "#fff",
+          cursor: uploading ? "not-allowed" : "pointer",
+          fontWeight: "bold",
+        }}
       >
-        {loading ? "投稿中..." : "投稿する"}
+        {uploading ? "投稿中..." : "投稿する"}
       </button>
-
-      {message && <p className="mt-4 text-sm text-gray-600">{message}</p>}
     </form>
   );
 }

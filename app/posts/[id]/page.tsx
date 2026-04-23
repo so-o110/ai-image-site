@@ -12,33 +12,50 @@ type Post = {
   tags: string;
   image_url: string;
   prompt: string;
+  user_id: string | null;
 };
 
 export default function PostDetailPage() {
   const params = useParams();
-  const id = params.id as string;
+  const id = params?.id as string;
 
   const [post, setPost] = useState<Post | null>(null);
   const [loading, setLoading] = useState(true);
   const [likesCount, setLikesCount] = useState(0);
   const [liking, setLiking] = useState(false);
+  const [session, setSession] = useState<any>(null);
 
   const fetchLikesCount = async () => {
-    const { count, error } = await supabase
+    const { data, error } = await supabase
       .from("likes")
-      .select("*", { count: "exact", head: true })
+      .select("post_id, user_id")
       .eq("post_id", id);
 
     if (error) {
-      console.error("いいね数取得エラー:", error.message);
+      console.error("いいね数取得エラー:", error);
+      alert(`いいね数取得エラー: ${error.message}`);
       return;
     }
 
-    setLikesCount(count || 0);
+    setLikesCount(data?.length || 0);
   };
 
   useEffect(() => {
+    const loadSession = async () => {
+      const {
+        data: { session: currentSession },
+      } = await supabase.auth.getSession();
+
+      setSession(currentSession);
+    };
+
+    loadSession();
+  }, []);
+
+  useEffect(() => {
     const fetchPost = async () => {
+      setLoading(true);
+
       const { data, error } = await supabase
         .from("posts")
         .select("*")
@@ -46,13 +63,13 @@ export default function PostDetailPage() {
         .single();
 
       if (error) {
-        console.error("投稿詳細取得エラー:", error.message);
-        setPost(null);
+        console.error("投稿取得エラー:", error.message);
+        alert(`投稿取得エラー: ${error.message}`);
         setLoading(false);
         return;
       }
 
-      setPost(data);
+      setPost(data as Post);
       setLoading(false);
     };
 
@@ -65,23 +82,53 @@ export default function PostDetailPage() {
   const handleLike = async () => {
     if (liking) return;
 
-    setLiking(true);
-
-    const { error } = await supabase.from("likes").insert([
-      {
-        post_id: id,
-      },
-    ]);
-
-    if (error) {
-      console.error("いいね保存エラー:", error.message);
-      alert("いいねに失敗しました。");
-      setLiking(false);
+    if (!session?.user) {
+      alert("いいねするにはログインしてください。");
       return;
     }
 
-    await fetchLikesCount();
-    setLiking(false);
+    setLiking(true);
+
+    try {
+      const { data: existingLike, error: checkError } = await supabase
+        .from("likes")
+        .select("post_id")
+        .eq("post_id", id)
+        .eq("user_id", session.user.id)
+        .maybeSingle();
+
+      if (checkError) {
+        console.error("いいね確認エラー:", checkError);
+        alert(`いいね状態の確認に失敗しました: ${checkError.message}`);
+        return;
+      }
+
+      if (existingLike) {
+        alert("この投稿にはすでにいいねしています。");
+        return;
+      }
+
+      const { error: insertError } = await supabase.from("likes").insert([
+        {
+          post_id: id,
+          user_id: session.user.id,
+        },
+      ]);
+
+      if (insertError) {
+        console.error("いいね保存エラー:", insertError);
+        alert(`いいねに失敗しました: ${insertError.message}`);
+        return;
+      }
+
+      await fetchLikesCount();
+      alert("いいねしました。");
+    } catch (error) {
+      console.error("予期しないエラー:", error);
+      alert("エラーが発生しました。");
+    } finally {
+      setLiking(false);
+    }
   };
 
   if (loading) {
@@ -90,10 +137,7 @@ export default function PostDetailPage() {
         style={{
           maxWidth: "900px",
           margin: "0 auto",
-          padding: "24px",
-          minHeight: "100vh",
-          backgroundColor: "#f7f7f7",
-          color: "#111",
+          padding: "24px 16px 80px",
         }}
       >
         <p>読み込み中...</p>
@@ -107,31 +151,13 @@ export default function PostDetailPage() {
         style={{
           maxWidth: "900px",
           margin: "0 auto",
-          padding: "24px",
-          minHeight: "100vh",
-          backgroundColor: "#f7f7f7",
-          color: "#111",
+          padding: "24px 16px 80px",
         }}
       >
-        <Link
-          href="/"
-          style={{
-            display: "inline-block",
-            marginBottom: "20px",
-            textDecoration: "none",
-            color: "#111",
-            fontWeight: "bold",
-          }}
-        >
+        <p>投稿が見つかりませんでした。</p>
+        <Link href="/" style={{ color: "#111" }}>
           ← 一覧に戻る
         </Link>
-
-        <h1 style={{ fontSize: "28px", fontWeight: "bold", marginBottom: "12px", color: "#111" }}>
-          投稿が見つかりません
-        </h1>
-        <p style={{ color: "#333" }}>
-          この投稿は削除されたか、URLが間違っている可能性があります。
-        </p>
       </main>
     );
   }
@@ -141,31 +167,24 @@ export default function PostDetailPage() {
       style={{
         maxWidth: "900px",
         margin: "0 auto",
-        padding: "24px",
+        padding: "24px 16px 80px",
+        color: "#111",
         backgroundColor: "#f7f7f7",
         minHeight: "100vh",
-        color: "#111",
       }}
     >
-      <Link
-        href="/"
-        style={{
-          display: "inline-block",
-          marginBottom: "20px",
-          textDecoration: "none",
-          color: "#111",
-          fontWeight: "bold",
-        }}
-      >
-        ← 一覧に戻る
-      </Link>
+      <div style={{ marginBottom: "20px" }}>
+        <Link href="/" style={{ color: "#111", textDecoration: "none" }}>
+          ← 一覧に戻る
+        </Link>
+      </div>
 
-      <div
+      <article
         style={{
-          background: "#fff",
+          backgroundColor: "#fff",
           border: "1px solid #ddd",
-          borderRadius: "16px",
-          padding: "20px",
+          borderRadius: "12px",
+          overflow: "hidden",
         }}
       >
         <img
@@ -173,83 +192,99 @@ export default function PostDetailPage() {
           alt={post.title}
           style={{
             width: "100%",
-            maxHeight: "600px",
+            maxHeight: "560px",
             objectFit: "contain",
-            borderRadius: "12px",
-            background: "#eee",
+            display: "block",
+            backgroundColor: "#eee",
           }}
         />
 
-        <h1 style={{ fontSize: "30px", fontWeight: "bold", marginTop: "20px", color: "#111" }}>
-          {post.title}
-        </h1>
-
-        <p style={{ fontSize: "14px", color: "#666", marginTop: "10px" }}>
-          投稿日: {new Date(post.created_at).toLocaleString("ja-JP")}
-        </p>
-
-        <div
-          style={{
-            marginTop: "20px",
-            display: "flex",
-            alignItems: "center",
-            gap: "12px",
-            flexWrap: "wrap",
-          }}
-        >
-          <button
-            onClick={handleLike}
-            disabled={liking}
+        <div style={{ padding: "24px" }}>
+          <h1
             style={{
-              padding: "10px 16px",
-              border: "none",
-              borderRadius: "8px",
-              background: liking ? "#999" : "#111",
-              color: "#fff",
-              fontSize: "14px",
-              cursor: liking ? "not-allowed" : "pointer",
+              fontSize: "30px",
+              fontWeight: "bold",
+              marginBottom: "12px",
             }}
           >
-            {liking ? "送信中..." : "♡ いいね"}
-          </button>
+            {post.title}
+          </h1>
 
-          <p style={{ fontSize: "15px", color: "#333", margin: 0 }}>
-            いいね数: <strong>{likesCount}</strong>
-          </p>
-        </div>
-
-        <div style={{ marginTop: "20px" }}>
-          <h2 style={{ fontSize: "18px", fontWeight: "bold", marginBottom: "8px", color: "#111" }}>
-            タグ
-          </h2>
           <p
             style={{
               fontSize: "14px",
-              color: "#333",
-              whiteSpace: "pre-wrap",
-              lineHeight: "1.7",
+              color: "#666",
+              marginBottom: "12px",
             }}
           >
-            {post.tags}
+            投稿日時: {new Date(post.created_at).toLocaleString("ja-JP")}
           </p>
-        </div>
 
-        <div style={{ marginTop: "24px" }}>
-          <h2 style={{ fontSize: "18px", fontWeight: "bold", marginBottom: "8px", color: "#111" }}>
-            プロンプト
-          </h2>
           <p
             style={{
-              fontSize: "14px",
+              fontSize: "15px",
               color: "#333",
-              whiteSpace: "pre-wrap",
-              lineHeight: "1.8",
+              marginBottom: "16px",
+              wordBreak: "break-word",
             }}
           >
-            {post.prompt}
+            タグ: {post.tags}
           </p>
+
+          <div style={{ marginBottom: "20px" }}>
+            <h2
+              style={{
+                fontSize: "20px",
+                fontWeight: "bold",
+                marginBottom: "10px",
+              }}
+            >
+              プロンプト
+            </h2>
+            <div
+              style={{
+                whiteSpace: "pre-wrap",
+                lineHeight: 1.7,
+                backgroundColor: "#fafafa",
+                border: "1px solid #e5e5e5",
+                borderRadius: "10px",
+                padding: "16px",
+              }}
+            >
+              {post.prompt}
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              gap: "12px",
+              alignItems: "center",
+              flexWrap: "wrap",
+            }}
+          >
+            <button
+              onClick={handleLike}
+              disabled={liking}
+              style={{
+                padding: "12px 18px",
+                borderRadius: "8px",
+                border: "none",
+                backgroundColor: liking ? "#999" : "#111",
+                color: "#fff",
+                cursor: liking ? "not-allowed" : "pointer",
+                fontWeight: "bold",
+              }}
+            >
+              {liking ? "送信中..." : "♡ いいね"}
+            </button>
+
+            <p style={{ margin: 0, fontSize: "16px", fontWeight: "bold" }}>
+              いいね数: {likesCount}
+            </p>
+          </div>
         </div>
-      </div>
+      </article>
     </main>
   );
 }
