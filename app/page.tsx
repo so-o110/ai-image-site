@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Session } from "@supabase/supabase-js";
+import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
+import PostForm from "@/app/components/PostForm";
 
 type Post = {
   id: string;
@@ -27,16 +28,9 @@ export default function Home() {
 
   const [posts, setPosts] = useState<Post[]>([]);
   const [likesCountMap, setLikesCountMap] = useState<LikesCountMap>({});
-
   const [sortType, setSortType] = useState<SortType>("new");
   const [selectedTag, setSelectedTag] = useState("すべて");
   const [searchText, setSearchText] = useState("");
-
-  const [title, setTitle] = useState("");
-  const [tags, setTags] = useState("");
-  const [prompt, setPrompt] = useState("");
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [uploading, setUploading] = useState(false);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -182,7 +176,7 @@ export default function Home() {
     return copied;
   }, [filteredPosts, likesCountMap, sortType]);
 
-  const handleAuth = async (e: React.FormEvent) => {
+  const handleAuth = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     if (!email.trim()) {
@@ -245,106 +239,6 @@ export default function Home() {
     alert("ログアウトしました。");
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!session?.user) {
-      alert("投稿するにはログインしてください。");
-      return;
-    }
-
-    if (!title.trim()) {
-      alert("タイトルを入力してください。");
-      return;
-    }
-
-    if (!tags.trim()) {
-      alert("タグを入力してください。");
-      return;
-    }
-
-    if (!prompt.trim()) {
-      alert("プロンプトを入力してください。");
-      return;
-    }
-
-    if (!imageFile) {
-      alert("画像を選択してください。");
-      return;
-    }
-
-    const allowedTypes = ["image/png", "image/jpeg", "image/jpg", "image/webp"];
-    if (!allowedTypes.includes(imageFile.type)) {
-      alert("PNG / JPG / JPEG / WEBP の画像だけアップロードできます。");
-      return;
-    }
-
-    const maxSize = 5 * 1024 * 1024;
-    if (imageFile.size > maxSize) {
-      alert("画像サイズは5MB以下にしてください。");
-      return;
-    }
-
-    setUploading(true);
-
-    try {
-      const fileExt = imageFile.name.split(".").pop();
-      const fileName = `${session.user.id}/${Date.now()}-${Math.random()
-        .toString(36)
-        .slice(2)}.${fileExt}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from("image")
-        .upload(fileName, imageFile);
-
-      if (uploadError) {
-        console.error("アップロードエラー:", uploadError.message);
-        alert(`画像のアップロードに失敗しました: ${uploadError.message}`);
-        return;
-      }
-
-      const { data: publicUrlData } = supabase.storage
-        .from("image")
-        .getPublicUrl(fileName);
-
-      const imageUrl = publicUrlData.publicUrl;
-
-      const { error: insertError } = await supabase.from("posts").insert([
-        {
-          title: title.trim(),
-          tags: tags.trim(),
-          prompt: prompt.trim(),
-          image_url: imageUrl,
-          user_id: session.user.id,
-        },
-      ]);
-
-      if (insertError) {
-        console.error("DB保存エラー:", insertError.message);
-        alert(`投稿の保存に失敗しました: ${insertError.message}`);
-        return;
-      }
-
-      setTitle("");
-      setTags("");
-      setPrompt("");
-      setImageFile(null);
-
-      const fileInput = document.getElementById("image") as HTMLInputElement | null;
-      if (fileInput) {
-        fileInput.value = "";
-      }
-
-      await refreshData();
-      alert("投稿できました。");
-    } catch (error) {
-      console.error("予期しないエラー:", error);
-      alert("エラーが発生しました。");
-    } finally {
-      setUploading(false);
-    }
-  };
-
   const handleDelete = async (postId: string) => {
     if (!confirm("本当に削除しますか？")) return;
 
@@ -362,30 +256,25 @@ export default function Home() {
   return (
     <main
       style={{
-        maxWidth: "1100px",
+        maxWidth: "960px",
         margin: "0 auto",
-        padding: "24px 16px 80px",
-        color: "#111",
+        padding: "32px 16px 80px",
         backgroundColor: "#f7f7f7",
         minHeight: "100vh",
       }}
     >
-      <h1 style={{ fontSize: "32px", fontWeight: "bold", marginBottom: "24px" }}>
-        AI画像投稿アプリ
-      </h1>
+      <h1 style={{ fontSize: "32px", marginBottom: "24px" }}>AI画像投稿アプリ</h1>
 
       <section
         style={{
-          backgroundColor: "#fff",
           border: "1px solid #ddd",
           borderRadius: "12px",
           padding: "20px",
-          marginBottom: "24px",
+          marginBottom: "32px",
+          backgroundColor: "#fff",
         }}
       >
-        <h2 style={{ fontSize: "22px", fontWeight: "bold", marginBottom: "16px" }}>
-          アカウント
-        </h2>
+        <h2 style={{ fontSize: "24px", marginBottom: "16px" }}>アカウント</h2>
 
         {authLoading ? (
           <p>認証状態を確認中...</p>
@@ -393,53 +282,48 @@ export default function Home() {
           <div
             style={{
               display: "flex",
-              flexWrap: "wrap",
+              justifyContent: "space-between",
               alignItems: "center",
               gap: "12px",
+              flexWrap: "wrap",
             }}
           >
             <p style={{ margin: 0 }}>ログイン中: {session.user.email}</p>
 
-            <Link
-              href="/mypage"
-              style={{
-                padding: "10px 14px",
-                borderRadius: "8px",
-                border: "1px solid #111",
-                textDecoration: "none",
-                color: "#111",
-                fontWeight: "bold",
-                backgroundColor: "#fff",
-              }}
-            >
-              マイページ
-            </Link>
+            <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+              <Link
+                href="/mypage"
+                style={{
+                  textDecoration: "none",
+                  color: "#111",
+                  fontWeight: "bold",
+                }}
+              >
+                マイページ
+              </Link>
 
-            <button
-              onClick={handleLogout}
-              style={{
-                padding: "10px 14px",
-                borderRadius: "8px",
-                border: "none",
-                backgroundColor: "#111",
-                color: "#fff",
-                cursor: "pointer",
-                fontWeight: "bold",
-              }}
-            >
-              ログアウト
-            </button>
+              <button
+                onClick={handleLogout}
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: "8px",
+                  border: "1px solid #111",
+                  background: "#fff",
+                  color: "#111",
+                  cursor: "pointer",
+                  fontSize: "14px",
+                  fontWeight: "bold",
+                }}
+              >
+                ログアウト
+              </button>
+            </div>
           </div>
         ) : (
           <>
-            <div
-              style={{
-                display: "flex",
-                gap: "12px",
-                marginBottom: "16px",
-              }}
-            >
+            <div style={{ display: "flex", gap: "12px", marginBottom: "16px" }}>
               <button
+                type="button"
                 onClick={() => setAuthMode("login")}
                 style={{
                   padding: "10px 14px",
@@ -456,6 +340,7 @@ export default function Home() {
               </button>
 
               <button
+                type="button"
                 onClick={() => setAuthMode("signup")}
                 style={{
                   padding: "10px 14px",
@@ -473,17 +358,15 @@ export default function Home() {
             </div>
 
             <form onSubmit={handleAuth}>
-              <div style={{ marginBottom: "12px" }}>
+              <div style={{ marginBottom: "16px" }}>
                 <label
-                  style={{
-                    display: "block",
-                    marginBottom: "6px",
-                    fontWeight: "bold",
-                  }}
+                  htmlFor="email"
+                  style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}
                 >
                   メールアドレス
                 </label>
                 <input
+                  id="email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -497,21 +380,20 @@ export default function Home() {
                     fontSize: "14px",
                     backgroundColor: "#fff",
                     color: "#111",
+                    boxSizing: "border-box",
                   }}
                 />
               </div>
 
               <div style={{ marginBottom: "16px" }}>
                 <label
-                  style={{
-                    display: "block",
-                    marginBottom: "6px",
-                    fontWeight: "bold",
-                  }}
+                  htmlFor="password"
+                  style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}
                 >
                   パスワード
                 </label>
                 <input
+                  id="password"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -525,6 +407,7 @@ export default function Home() {
                     fontSize: "14px",
                     backgroundColor: "#fff",
                     color: "#111",
+                    boxSizing: "border-box",
                   }}
                 />
               </div>
@@ -555,169 +438,26 @@ export default function Home() {
         )}
       </section>
 
-      <section
-        style={{
-          backgroundColor: "#fff",
-          border: "1px solid #ddd",
-          borderRadius: "12px",
-          padding: "20px",
-          marginBottom: "24px",
-        }}
-      >
-        <h2 style={{ fontSize: "22px", fontWeight: "bold", marginBottom: "16px" }}>
-          新規投稿
-        </h2>
+      <section style={{ marginBottom: "32px" }}>
+        <h2 style={{ fontSize: "24px", marginBottom: "16px" }}>新規投稿</h2>
 
-        {!session?.user && (
-          <p style={{ marginBottom: "16px", color: "#555" }}>
-            投稿するにはログインが必要です。
-          </p>
+        {!session?.user ? (
+          <p style={{ color: "#666" }}>投稿するにはログインが必要です。</p>
+        ) : (
+          <PostForm userId={session.user.id} onPostCreated={refreshData} />
         )}
-
-        <form onSubmit={handleSubmit}>
-          <div style={{ marginBottom: "12px" }}>
-            <label
-              style={{
-                display: "block",
-                marginBottom: "6px",
-                fontWeight: "bold",
-              }}
-            >
-              タイトル
-            </label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="作品タイトルを入力"
-              disabled={uploading || !session?.user}
-              style={{
-                width: "100%",
-                padding: "10px",
-                border: "1px solid #ccc",
-                borderRadius: "8px",
-                fontSize: "14px",
-                backgroundColor: "#fff",
-                color: "#111",
-              }}
-            />
-          </div>
-
-          <div style={{ marginBottom: "12px" }}>
-            <label
-              style={{
-                display: "block",
-                marginBottom: "6px",
-                fontWeight: "bold",
-              }}
-            >
-              タグ
-            </label>
-            <input
-              type="text"
-              value={tags}
-              onChange={(e) => setTags(e.target.value)}
-              placeholder="例: anime, girl, fantasy"
-              disabled={uploading || !session?.user}
-              style={{
-                width: "100%",
-                padding: "10px",
-                border: "1px solid #ccc",
-                borderRadius: "8px",
-                fontSize: "14px",
-                backgroundColor: "#fff",
-                color: "#111",
-              }}
-            />
-            <p style={{ fontSize: "12px", color: "#666", marginTop: "6px" }}>
-              タグはカンマ区切りで入力してください
-            </p>
-          </div>
-
-          <div style={{ marginBottom: "12px" }}>
-            <label
-              style={{
-                display: "block",
-                marginBottom: "6px",
-                fontWeight: "bold",
-              }}
-            >
-              プロンプト
-            </label>
-            <textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="生成に使ったプロンプトを入力"
-              disabled={uploading || !session?.user}
-              rows={5}
-              style={{
-                width: "100%",
-                padding: "10px",
-                border: "1px solid #ccc",
-                borderRadius: "8px",
-                fontSize: "14px",
-                backgroundColor: "#fff",
-                color: "#111",
-                resize: "vertical",
-              }}
-            />
-          </div>
-
-          <div style={{ marginBottom: "16px" }}>
-            <label
-              style={{
-                display: "block",
-                marginBottom: "6px",
-                fontWeight: "bold",
-              }}
-            >
-              画像
-            </label>
-            <input
-              id="image"
-              type="file"
-              accept="image/png,image/jpeg,image/jpg,image/webp"
-              disabled={uploading || !session?.user}
-              onChange={(e) => {
-                const file = e.target.files?.[0] || null;
-                setImageFile(file);
-              }}
-            />
-            <p style={{ fontSize: "12px", color: "#666", marginTop: "6px" }}>
-              PNG / JPG / JPEG / WEBP、5MB以下
-            </p>
-          </div>
-
-          <button
-            type="submit"
-            disabled={uploading || !session?.user}
-            style={{
-              padding: "12px 18px",
-              borderRadius: "8px",
-              border: "none",
-              backgroundColor: uploading || !session?.user ? "#999" : "#111",
-              color: "#fff",
-              cursor: uploading || !session?.user ? "not-allowed" : "pointer",
-              fontWeight: "bold",
-            }}
-          >
-            {uploading ? "投稿中..." : "投稿する"}
-          </button>
-        </form>
       </section>
 
       <section
         style={{
-          backgroundColor: "#fff",
           border: "1px solid #ddd",
           borderRadius: "12px",
           padding: "20px",
-          marginBottom: "24px",
+          marginBottom: "32px",
+          backgroundColor: "#fff",
         }}
       >
-        <h2 style={{ fontSize: "22px", fontWeight: "bold", marginBottom: "16px" }}>
-          検索・絞り込み
-        </h2>
+        <h2 style={{ fontSize: "24px", marginBottom: "16px" }}>検索・絞り込み</h2>
 
         <div
           style={{
@@ -739,6 +479,7 @@ export default function Home() {
               fontSize: "14px",
               backgroundColor: "#fff",
               color: "#111",
+              boxSizing: "border-box",
             }}
           />
 
@@ -753,6 +494,7 @@ export default function Home() {
               fontSize: "14px",
               backgroundColor: "#fff",
               color: "#111",
+              boxSizing: "border-box",
             }}
           >
             {allTags.map((tag) => (
@@ -773,6 +515,7 @@ export default function Home() {
               fontSize: "14px",
               backgroundColor: "#fff",
               color: "#111",
+              boxSizing: "border-box",
             }}
           >
             <option value="new">新着順</option>
@@ -782,111 +525,128 @@ export default function Home() {
       </section>
 
       <section>
-        <h2 style={{ fontSize: "22px", fontWeight: "bold", marginBottom: "16px" }}>
-          投稿一覧
-        </h2>
+        <h2 style={{ fontSize: "24px", marginBottom: "16px" }}>投稿一覧</h2>
 
         {sortedPosts.length === 0 ? (
-          <p>投稿がまだありません。</p>
+          <p>投稿がありません。</p>
         ) : (
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-              gap: "16px",
+              gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+              gap: "20px",
             }}
           >
-            {sortedPosts.map((post) => (
-              <article
-                key={post.id}
-                style={{
-                  backgroundColor: "#fff",
-                  border: "1px solid #ddd",
-                  borderRadius: "12px",
-                  overflow: "hidden",
-                }}
-              >
-                <Link
-                  href={`/posts/${post.id}`}
-                  style={{ color: "inherit", textDecoration: "none" }}
+            {sortedPosts.map((post) => {
+              const isOwner = session?.user?.id === post.user_id;
+              const likeCount = likesCountMap[post.id] || 0;
+
+              return (
+                <article
+                  key={post.id}
+                  style={{
+                    border: "1px solid #ddd",
+                    borderRadius: "12px",
+                    overflow: "hidden",
+                    backgroundColor: "#fff",
+                  }}
                 >
-                  <img
-                    src={post.image_url}
-                    alt={post.title}
-                    style={{
-                      width: "100%",
-                      height: "220px",
-                      objectFit: "cover",
-                      display: "block",
-                      backgroundColor: "#eee",
-                    }}
-                  />
-
-                  <div style={{ padding: "16px" }}>
-                    <h3
-                      style={{
-                        fontSize: "18px",
-                        fontWeight: "bold",
-                        marginBottom: "8px",
-                      }}
-                    >
-                      {post.title}
-                    </h3>
-
-                    <p
-                      style={{
-                        fontSize: "13px",
-                        color: "#666",
-                        marginBottom: "8px",
-                      }}
-                    >
-                      {new Date(post.created_at).toLocaleString("ja-JP")}
-                    </p>
-
-                    <p
-                      style={{
-                        fontSize: "14px",
-                        color: "#333",
-                        marginBottom: "8px",
-                        wordBreak: "break-word",
-                      }}
-                    >
-                      タグ: {post.tags}
-                    </p>
-
-                    <p
-                      style={{
-                        fontSize: "14px",
-                        color: "#333",
-                        marginBottom: "0",
-                      }}
-                    >
-                      いいね: {likesCountMap[post.id] || 0}
-                    </p>
-                  </div>
-                </Link>
-
-                {session?.user?.id === post.user_id && (
-                  <div style={{ padding: "0 16px 16px" }}>
-                    <button
-                      onClick={() => handleDelete(post.id)}
+                  <Link
+                    href={`/posts/${post.id}`}
+                    style={{ textDecoration: "none", color: "inherit" }}
+                  >
+                    <img
+                      src={post.image_url}
+                      alt={post.title}
                       style={{
                         width: "100%",
-                        padding: "10px 14px",
-                        borderRadius: "8px",
-                        border: "none",
-                        backgroundColor: "#d11a2a",
-                        color: "#fff",
-                        cursor: "pointer",
-                        fontWeight: "bold",
+                        aspectRatio: "1 / 1",
+                        objectFit: "cover",
+                        display: "block",
+                        backgroundColor: "#eee",
+                      }}
+                    />
+                  </Link>
+
+                  <div style={{ padding: "16px" }}>
+                    <Link
+                      href={`/posts/${post.id}`}
+                      style={{ textDecoration: "none", color: "inherit" }}
+                    >
+                      <h3 style={{ margin: "0 0 8px", fontSize: "18px" }}>{post.title}</h3>
+                    </Link>
+
+                    <p style={{ margin: "0 0 8px", color: "#666", fontSize: "14px" }}>
+                      いいね: {likeCount}
+                    </p>
+
+                    <p style={{ margin: "0 0 12px", color: "#444", fontSize: "14px" }}>
+                      {post.tags}
+                    </p>
+
+                    <p
+                      style={{
+                        margin: "0 0 12px",
+                        color: "#666",
+                        fontSize: "13px",
+                        lineHeight: 1.6,
+                        display: "-webkit-box",
+                        WebkitLineClamp: 3,
+                        WebkitBoxOrient: "vertical",
+                        overflow: "hidden",
                       }}
                     >
-                      削除
-                    </button>
+                      {post.prompt}
+                    </p>
+
+                    <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+                      <Link
+                        href={`/posts/${post.id}`}
+                        style={{
+                          textDecoration: "none",
+                          color: "#111",
+                          fontWeight: "bold",
+                          fontSize: "14px",
+                        }}
+                      >
+                        詳細を見る
+                      </Link>
+
+                      {isOwner && (
+                        <>
+                          <Link
+                            href={`/posts/${post.id}/edit`}
+                            style={{
+                              textDecoration: "none",
+                              color: "#111",
+                              fontWeight: "bold",
+                              fontSize: "14px",
+                            }}
+                          >
+                            編集
+                          </Link>
+
+                          <button
+                            onClick={() => handleDelete(post.id)}
+                            style={{
+                              border: "none",
+                              background: "transparent",
+                              padding: 0,
+                              color: "#c00",
+                              cursor: "pointer",
+                              fontWeight: "bold",
+                              fontSize: "14px",
+                            }}
+                          >
+                            削除
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
-                )}
-              </article>
-            ))}
+                </article>
+              );
+            })}
           </div>
         )}
       </section>

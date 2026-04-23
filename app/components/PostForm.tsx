@@ -15,7 +15,7 @@ export default function PostForm({ userId, onPostCreated }: PostFormProps) {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     if (!title.trim()) {
@@ -119,75 +119,107 @@ export default function PostForm({ userId, onPostCreated }: PostFormProps) {
         backgroundColor: "#fff",
       }}
     >
-      <h2 style={{ fontSize: "22px", fontWeight: "bold", marginBottom: "16px" }}>
-        新しい投稿
-      </h2>
+      <h2 style={{ fontSize: "22px", marginBottom: "20px" }}>新規投稿</h2>
 
       <div style={{ marginBottom: "16px" }}>
-        <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>
+        <label
+          htmlFor="post-title"
+          style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}
+        >
           タイトル
         </label>
         <input
+          id="post-title"
           type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder="例: 幻想の街"
+          placeholder="作品タイトルを入力"
+          disabled={uploading}
           style={{
             width: "100%",
             padding: "10px",
             border: "1px solid #ccc",
             borderRadius: "8px",
+            fontSize: "14px",
+            backgroundColor: "#fff",
+            color: "#111",
           }}
         />
       </div>
 
       <div style={{ marginBottom: "16px" }}>
-        <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>
+        <label
+          htmlFor="post-tags"
+          style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}
+        >
           タグ
         </label>
         <input
+          id="post-tags"
           type="text"
           value={tags}
           onChange={(e) => setTags(e.target.value)}
-          placeholder="例: fantasy, city, night"
+          placeholder="例: anime, girl, fantasy"
+          disabled={uploading}
           style={{
             width: "100%",
             padding: "10px",
             border: "1px solid #ccc",
             borderRadius: "8px",
+            fontSize: "14px",
+            backgroundColor: "#fff",
+            color: "#111",
           }}
         />
+        <p style={{ marginTop: "8px", fontSize: "13px", color: "#666" }}>
+          タグはカンマ区切りで入力してください
+        </p>
       </div>
 
       <div style={{ marginBottom: "16px" }}>
-        <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>
+        <label
+          htmlFor="post-prompt"
+          style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}
+        >
           プロンプト
         </label>
         <textarea
+          id="post-prompt"
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           rows={5}
-          placeholder="例: masterpiece, best quality, fantasy city, cinematic lighting..."
+          placeholder="画像生成に使ったプロンプトを入力"
+          disabled={uploading}
           style={{
             width: "100%",
             padding: "10px",
             border: "1px solid #ccc",
             borderRadius: "8px",
+            fontSize: "14px",
+            backgroundColor: "#fff",
+            color: "#111",
+            resize: "vertical",
           }}
         />
       </div>
 
       <div style={{ marginBottom: "16px" }}>
-        <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>
+        <label
+          htmlFor="image"
+          style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}
+        >
           画像（PNG / JPG / JPEG / WEBP、5MB以下）
         </label>
         <input
           id="image"
           type="file"
           accept="image/png,image/jpeg,image/jpg,image/webp"
+          disabled={uploading}
           onChange={(e) => {
             if (e.target.files && e.target.files.length > 0) {
               setImageFile(e.target.files[0]);
+            } else {
+              setImageFile(null);
             }
           }}
         />
