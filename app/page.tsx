@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
@@ -12,8 +13,13 @@ type Post = {
   prompt: string;
 };
 
+type LikesCountMap = {
+  [postId: string]: number;
+};
+
 export default function Home() {
   const [posts, setPosts] = useState<Post[]>([]);
+  const [likesCountMap, setLikesCountMap] = useState<LikesCountMap>({});
   const [title, setTitle] = useState("");
   const [tags, setTags] = useState("");
   const [prompt, setPrompt] = useState("");
@@ -28,14 +34,38 @@ export default function Home() {
 
     if (error) {
       console.error("投稿取得エラー:", error.message);
+      alert(`投稿取得エラー: ${error.message}`);
       return;
     }
 
     setPosts(data || []);
   };
 
+  const fetchLikesCounts = async () => {
+    const { data, error } = await supabase.from("likes").select("post_id");
+
+    if (error) {
+      console.error("いいね取得エラー:", error.message);
+      return;
+    }
+
+    const nextMap: LikesCountMap = {};
+
+    for (const like of data || []) {
+      const postId = like.post_id as string;
+      nextMap[postId] = (nextMap[postId] || 0) + 1;
+    }
+
+    setLikesCountMap(nextMap);
+  };
+
+  const refreshData = async () => {
+    await fetchPosts();
+    await fetchLikesCounts();
+  };
+
   useEffect(() => {
-    fetchPosts();
+    refreshData();
   }, []);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -120,7 +150,7 @@ export default function Home() {
         fileInput.value = "";
       }
 
-      await fetchPosts();
+      await refreshData();
       alert("投稿できました。");
     } catch (error) {
       console.error("予期しないエラー:", error);
@@ -131,8 +161,17 @@ export default function Home() {
   };
 
   return (
-    <main style={{ maxWidth: "1000px", margin: "0 auto", padding: "24px" }}>
-      <h1 style={{ fontSize: "32px", fontWeight: "bold", marginBottom: "24px" }}>
+    <main
+      style={{
+        maxWidth: "1100px",
+        margin: "0 auto",
+        padding: "24px",
+        backgroundColor: "#f7f7f7",
+        minHeight: "100vh",
+        color: "#111",
+      }}
+    >
+      <h1 style={{ fontSize: "32px", fontWeight: "bold", marginBottom: "24px", color: "#111" }}>
         AI画像投稿アプリ
       </h1>
 
@@ -146,12 +185,19 @@ export default function Home() {
           background: "#fff",
         }}
       >
-        <h2 style={{ fontSize: "22px", fontWeight: "bold", marginBottom: "16px" }}>
+        <h2 style={{ fontSize: "22px", fontWeight: "bold", marginBottom: "16px", color: "#111" }}>
           新規投稿
         </h2>
 
         <div style={{ marginBottom: "16px" }}>
-          <label style={{ display: "block", fontWeight: "bold", marginBottom: "8px" }}>
+          <label
+            style={{
+              display: "block",
+              fontWeight: "bold",
+              marginBottom: "8px",
+              color: "#111",
+            }}
+          >
             タイトル
           </label>
           <input
@@ -166,12 +212,21 @@ export default function Home() {
               border: "1px solid #ccc",
               borderRadius: "8px",
               fontSize: "14px",
+              backgroundColor: "#fff",
+              color: "#111",
             }}
           />
         </div>
 
         <div style={{ marginBottom: "16px" }}>
-          <label style={{ display: "block", fontWeight: "bold", marginBottom: "8px" }}>
+          <label
+            style={{
+              display: "block",
+              fontWeight: "bold",
+              marginBottom: "8px",
+              color: "#111",
+            }}
+          >
             タグ
           </label>
           <input
@@ -186,12 +241,21 @@ export default function Home() {
               border: "1px solid #ccc",
               borderRadius: "8px",
               fontSize: "14px",
+              backgroundColor: "#fff",
+              color: "#111",
             }}
           />
         </div>
 
         <div style={{ marginBottom: "16px" }}>
-          <label style={{ display: "block", fontWeight: "bold", marginBottom: "8px" }}>
+          <label
+            style={{
+              display: "block",
+              fontWeight: "bold",
+              marginBottom: "8px",
+              color: "#111",
+            }}
+          >
             プロンプト
           </label>
           <textarea
@@ -207,12 +271,21 @@ export default function Home() {
               borderRadius: "8px",
               fontSize: "14px",
               resize: "vertical",
+              backgroundColor: "#fff",
+              color: "#111",
             }}
           />
         </div>
 
         <div style={{ marginBottom: "16px" }}>
-          <label style={{ display: "block", fontWeight: "bold", marginBottom: "8px" }}>
+          <label
+            style={{
+              display: "block",
+              fontWeight: "bold",
+              marginBottom: "8px",
+              color: "#111",
+            }}
+          >
             画像
           </label>
           <input
@@ -221,6 +294,7 @@ export default function Home() {
             accept="image/png,image/jpeg,image/jpg,image/webp"
             disabled={uploading}
             onChange={(e) => setImageFile(e.target.files?.[0] || null)}
+            style={{ color: "#111" }}
           />
         </div>
 
@@ -241,12 +315,12 @@ export default function Home() {
         </button>
       </form>
 
-      <h2 style={{ fontSize: "24px", fontWeight: "bold", marginBottom: "16px" }}>
+      <h2 style={{ fontSize: "24px", fontWeight: "bold", marginBottom: "16px", color: "#111" }}>
         投稿一覧
       </h2>
 
       {posts.length === 0 ? (
-        <p>まだ投稿がありません。</p>
+        <p style={{ color: "#333" }}>まだ投稿がありません。</p>
       ) : (
         <div
           style={{
@@ -256,54 +330,116 @@ export default function Home() {
           }}
         >
           {posts.map((post) => (
-            <div
+            <Link
               key={post.id}
+              href={`/posts/${post.id}`}
               style={{
-                border: "1px solid #ddd",
-                borderRadius: "12px",
-                padding: "12px",
-                background: "#fff",
+                textDecoration: "none",
+                color: "inherit",
               }}
             >
-              <img
-                src={post.image_url}
-                alt={post.title}
+              <div
                 style={{
-                  width: "100%",
-                  height: "260px",
-                  objectFit: "cover",
-                  borderRadius: "8px",
+                  border: "1px solid #ddd",
+                  borderRadius: "12px",
+                  padding: "12px",
+                  background: "#fff",
+                  height: "100%",
+                  cursor: "pointer",
                 }}
-              />
-
-              <h3 style={{ fontSize: "18px", fontWeight: "bold", marginTop: "12px" }}>
-                {post.title}
-              </h3>
-
-              <p style={{ fontSize: "13px", color: "#666", marginTop: "8px" }}>
-                タグ: {post.tags}
-              </p>
-
-              <div style={{ marginTop: "10px" }}>
-                <p style={{ fontSize: "13px", fontWeight: "bold", marginBottom: "6px" }}>
-                  プロンプト
-                </p>
-                <p
+              >
+                <img
+                  src={post.image_url}
+                  alt={post.title}
                   style={{
-                    fontSize: "13px",
-                    color: "#333",
-                    whiteSpace: "pre-wrap",
-                    lineHeight: "1.6",
+                    width: "100%",
+                    height: "260px",
+                    objectFit: "cover",
+                    borderRadius: "8px",
+                  }}
+                />
+
+                <div
+                  style={{
+                    marginTop: "12px",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: "12px",
                   }}
                 >
-                  {post.prompt}
+                  <h3
+                    style={{
+                      fontSize: "18px",
+                      fontWeight: "bold",
+                      color: "#111",
+                      margin: 0,
+                      flex: 1,
+                    }}
+                  >
+                    {post.title}
+                  </h3>
+
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: "14px",
+                      fontWeight: "bold",
+                      color: "#111",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    ❤️ {likesCountMap[post.id] || 0}
+                  </p>
+                </div>
+
+                <p style={{ fontSize: "13px", color: "#666", marginTop: "8px" }}>
+                  タグ: {post.tags}
+                </p>
+
+                <div style={{ marginTop: "10px" }}>
+                  <p
+                    style={{
+                      fontSize: "13px",
+                      fontWeight: "bold",
+                      marginBottom: "6px",
+                      color: "#111",
+                    }}
+                  >
+                    プロンプト
+                  </p>
+                  <p
+                    style={{
+                      fontSize: "13px",
+                      color: "#333",
+                      whiteSpace: "pre-wrap",
+                      lineHeight: "1.6",
+                      display: "-webkit-box",
+                      WebkitLineClamp: 3,
+                      WebkitBoxOrient: "vertical",
+                      overflow: "hidden",
+                    }}
+                  >
+                    {post.prompt}
+                  </p>
+                </div>
+
+                <p style={{ fontSize: "12px", color: "#888", marginTop: "12px" }}>
+                  {new Date(post.created_at).toLocaleString("ja-JP")}
+                </p>
+
+                <p
+                  style={{
+                    marginTop: "12px",
+                    fontSize: "13px",
+                    fontWeight: "bold",
+                    color: "#111",
+                  }}
+                >
+                  詳細を見る →
                 </p>
               </div>
-
-              <p style={{ fontSize: "12px", color: "#888", marginTop: "12px" }}>
-                {new Date(post.created_at).toLocaleString("ja-JP")}
-              </p>
-            </div>
+            </Link>
           ))}
         </div>
       )}
