@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import { Session } from "@supabase/supabase-js";
+import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 
 type Post = {
@@ -20,91 +20,25 @@ type Comment = {
   id: string;
   created_at: string;
   post_id: string;
-  user_id: string;
+  user_id: string | null;
   content: string;
 };
 
 export default function PostDetailPage() {
   const params = useParams();
-  const id = params?.id as string;
-
-  const [post, setPost] = useState<Post | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const [likesCount, setLikesCount] = useState(0);
-  const [liking, setLiking] = useState(false);
-  const [likedByMe, setLikedByMe] = useState(false);
+  const postId = params.id as string;
 
   const [session, setSession] = useState<Session | null>(null);
-
+  const [post, setPost] = useState<Post | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
+  const [likeCount, setLikeCount] = useState(0);
+  const [liked, setLiked] = useState(false);
   const [commentText, setCommentText] = useState("");
+  const [loading, setLoading] = useState(true);
   const [commentSubmitting, setCommentSubmitting] = useState(false);
+  const [likeSubmitting, setLikeSubmitting] = useState(false);
 
-  const fetchPost = async () => {
-    const { data, error } = await supabase
-      .from("posts")
-      .select("*")
-      .eq("id", id)
-      .single();
-
-    if (error) {
-      console.error("投稿取得エラー:", error.message);
-      alert(`投稿取得エラー: ${error.message}`);
-      setLoading(false);
-      return;
-    }
-
-    setPost(data as Post);
-  };
-
-  const fetchLikesCount = async () => {
-    const { data, error } = await supabase
-      .from("likes")
-      .select("post_id")
-      .eq("post_id", id);
-
-    if (error) {
-      console.error("いいね数取得エラー:", error);
-      alert(`いいね数取得エラー: ${error.message}`);
-      return;
-    }
-
-    setLikesCount(data?.length || 0);
-  };
-
-  const fetchLikedByMe = async (userId: string) => {
-    const { data, error } = await supabase
-      .from("likes")
-      .select("post_id")
-      .eq("post_id", id)
-      .eq("user_id", userId)
-      .maybeSingle();
-
-    if (error) {
-      console.error("いいね状態取得エラー:", error);
-      alert(`いいね状態取得エラー: ${error.message}`);
-      return;
-    }
-
-    setLikedByMe(!!data);
-  };
-
-  const fetchComments = async () => {
-    const { data, error } = await supabase
-      .from("comments")
-      .select("*")
-      .eq("post_id", id)
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      console.error("コメント取得エラー:", error.message);
-      alert(`コメント取得エラー: ${error.message}`);
-      return;
-    }
-
-    setComments((data as Comment[]) || []);
-  };
+  const isOwner = session?.user?.id && post?.user_id === session.user.id;
 
   useEffect(() => {
     const loadSession = async () => {
@@ -113,124 +47,159 @@ export default function PostDetailPage() {
       } = await supabase.auth.getSession();
 
       setSession(currentSession);
-
-      if (currentSession?.user && id) {
-        await fetchLikedByMe(currentSession.user.id);
-      } else {
-        setLikedByMe(false);
-      }
     };
 
     loadSession();
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, currentSession) => {
+    } = supabase.auth.onAuthStateChange((_event, currentSession) => {
       setSession(currentSession);
-
-      if (currentSession?.user && id) {
-        await fetchLikedByMe(currentSession.user.id);
-      } else {
-        setLikedByMe(false);
-      }
     });
 
     return () => {
       subscription.unsubscribe();
     };
-  }, [id]);
+  }, []);
 
   useEffect(() => {
-    const loadPage = async () => {
-      if (!id) return;
+    if (!postId) return;
+    refreshData();
+  }, [postId]);
 
-      setLoading(true);
-      await fetchPost();
-      await fetchLikesCount();
-      await fetchComments();
-      setLoading(false);
-    };
+  useEffect(() => {
+    if (!postId || !session?.user?.id) {
+      setLiked(false);
+      return;
+    }
 
-    loadPage();
-  }, [id]);
+    fetchLikedState();
+  }, [postId, session?.user?.id]);
 
-  const handleLike = async () => {
-    if (liking) return;
+  async function refreshData() {
+    setLoading(true);
 
-    if (!session?.user) {
+    await Promise.all([fetchPost(), fetchComments(), fetchLikeCount()]);
+
+    setLoading(false);
+  }
+
+  async function fetchPost() {
+    const { data, error } = await supabase
+      .from("posts")
+      .select("*")
+      .eq("id", postId)
+      .single();
+
+    if (error) {
+      console.error("投稿取得エラー:", error.message);
+      setPost(null);
+      return;
+    }
+
+    setPost(data as Post);
+  }
+
+  async function fetchComments() {
+    const { data, error } = await supabase
+      .from("comments")
+      .select("*")
+      .eq("post_id", postId)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("コメント取得エラー:", error.message);
+      setComments([]);
+      return;
+    }
+
+    setComments((data as Comment[]) || []);
+  }
+
+  async function fetchLikeCount() {
+    const { count, error } = await supabase
+      .from("likes")
+      .select("*", { count: "exact", head: true })
+      .eq("post_id", postId);
+
+    if (error) {
+      console.error("いいね数取得エラー:", error.message);
+      setLikeCount(0);
+      return;
+    }
+
+    setLikeCount(count || 0);
+  }
+
+  async function fetchLikedState() {
+    if (!session?.user?.id) return;
+
+    const { data, error } = await supabase
+      .from("likes")
+      .select("id")
+      .eq("post_id", postId)
+      .eq("user_id", session.user.id)
+      .maybeSingle();
+
+    if (error) {
+      console.error("いいね状態取得エラー:", error.message);
+      setLiked(false);
+      return;
+    }
+
+    setLiked(Boolean(data));
+  }
+
+  async function handleToggleLike() {
+    if (!session?.user?.id) {
       alert("いいねするにはログインしてください。");
       return;
     }
 
-    setLiking(true);
+    if (!post) return;
+
+    setLikeSubmitting(true);
 
     try {
-      if (likedByMe) {
-        const { error: deleteError } = await supabase
+      if (liked) {
+        const { error } = await supabase
           .from("likes")
           .delete()
-          .eq("post_id", id)
+          .eq("post_id", post.id)
           .eq("user_id", session.user.id);
 
-        if (deleteError) {
-          console.error("いいね解除エラー:", deleteError);
-          alert(`いいね解除に失敗しました: ${deleteError.message}`);
+        if (error) {
+          alert("いいね解除に失敗しました: " + error.message);
           return;
         }
 
-        setLikedByMe(false);
-        setLikesCount((prev) => Math.max(0, prev - 1));
-        alert("いいねを解除しました。");
-        return;
+        setLiked(false);
+      } else {
+        const { error } = await supabase.from("likes").insert([
+          {
+            post_id: post.id,
+            user_id: session.user.id,
+          },
+        ]);
+
+        if (error) {
+          alert("いいねに失敗しました: " + error.message);
+          return;
+        }
+
+        setLiked(true);
       }
 
-      const { data: existingLike, error: checkError } = await supabase
-        .from("likes")
-        .select("post_id")
-        .eq("post_id", id)
-        .eq("user_id", session.user.id)
-        .maybeSingle();
-
-      if (checkError) {
-        console.error("いいね確認エラー:", checkError);
-        alert(`いいね状態の確認に失敗しました: ${checkError.message}`);
-        return;
-      }
-
-      if (existingLike) {
-        setLikedByMe(true);
-        alert("この投稿にはすでにいいねしています。");
-        return;
-      }
-
-      const { error: insertError } = await supabase.from("likes").insert([
-        {
-          post_id: id,
-          user_id: session.user.id,
-        },
-      ]);
-
-      if (insertError) {
-        console.error("いいね保存エラー:", insertError);
-        alert(`いいねに失敗しました: ${insertError.message}`);
-        return;
-      }
-
-      setLikedByMe(true);
-      setLikesCount((prev) => prev + 1);
-      alert("いいねしました。");
-    } catch (error) {
-      console.error("予期しないエラー:", error);
-      alert("エラーが発生しました。");
+      await fetchLikeCount();
     } finally {
-      setLiking(false);
+      setLikeSubmitting(false);
     }
-  };
+  }
 
-  const handleCommentSubmit = async (e: React.FormEvent) => {
+  async function handleCreateComment(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
-    if (!session?.user) {
+    if (!session?.user?.id) {
       alert("コメントするにはログインしてください。");
       return;
     }
@@ -242,34 +211,27 @@ export default function PostDetailPage() {
 
     setCommentSubmitting(true);
 
-    try {
-      const { error } = await supabase.from("comments").insert([
-        {
-          post_id: id,
-          user_id: session.user.id,
-          content: commentText.trim(),
-        },
-      ]);
+    const { error } = await supabase.from("comments").insert([
+      {
+        post_id: postId,
+        user_id: session.user.id,
+        content: commentText.trim(),
+      },
+    ]);
 
-      if (error) {
-        console.error("コメント投稿エラー:", error.message);
-        alert(`コメント投稿に失敗しました: ${error.message}`);
-        return;
-      }
-
-      setCommentText("");
-      await fetchComments();
-      alert("コメントを投稿しました。");
-    } catch (error) {
-      console.error("予期しないエラー:", error);
-      alert("エラーが発生しました。");
-    } finally {
+    if (error) {
+      alert("コメント投稿に失敗しました: " + error.message);
       setCommentSubmitting(false);
+      return;
     }
-  };
 
-  const handleCommentDelete = async (commentId: string) => {
-    if (!confirm("このコメントを削除しますか？")) return;
+    setCommentText("");
+    await fetchComments();
+    setCommentSubmitting(false);
+  }
+
+  async function handleDeleteComment(commentId: string) {
+    if (!confirm("コメントを削除しますか？")) return;
 
     const { error } = await supabase
       .from("comments")
@@ -277,309 +239,283 @@ export default function PostDetailPage() {
       .eq("id", commentId);
 
     if (error) {
-      console.error("コメント削除エラー:", error.message);
-      alert(`コメント削除に失敗しました: ${error.message}`);
+      alert("コメント削除に失敗しました: " + error.message);
       return;
     }
 
     await fetchComments();
-    alert("コメントを削除しました。");
-  };
+  }
+
+  async function handleDeletePost() {
+    if (!post) return;
+    if (!confirm("本当にこの投稿を削除しますか？")) return;
+
+    const { error } = await supabase.from("posts").delete().eq("id", post.id);
+
+    if (error) {
+      alert("削除に失敗しました: " + error.message);
+      return;
+    }
+
+    alert("削除しました");
+    window.location.href = "/";
+  }
+
+  const tags = useMemo(() => {
+    if (!post?.tags) return [];
+
+    return post.tags
+      .split(",")
+      .map((tag) => tag.trim())
+      .filter(Boolean);
+  }, [post?.tags]);
+
+  function formatDate(dateString: string) {
+    const date = new Date(dateString);
+    return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`;
+  }
 
   if (loading) {
     return (
-      <main
-        style={{
-          maxWidth: "900px",
-          margin: "0 auto",
-          padding: "24px 16px 80px",
-        }}
-      >
-        <p>読み込み中...</p>
-      </main>
+      <div className="min-h-screen bg-[#07070a] text-white">
+        <Header session={session} />
+        <main className="mx-auto max-w-5xl px-4 py-10 md:px-8">
+          <div className="rounded-3xl border border-white/10 bg-[#15151c] p-10 text-center text-gray-400">
+            読み込み中...
+          </div>
+        </main>
+      </div>
     );
   }
 
   if (!post) {
     return (
-      <main
-        style={{
-          maxWidth: "900px",
-          margin: "0 auto",
-          padding: "24px 16px 80px",
-        }}
-      >
-        <p>投稿が見つかりませんでした。</p>
-        <Link href="/" style={{ color: "#111" }}>
-          ← 一覧に戻る
-        </Link>
-      </main>
+      <div className="min-h-screen bg-[#07070a] text-white">
+        <Header session={session} />
+        <main className="mx-auto max-w-5xl px-4 py-10 md:px-8">
+          <div className="rounded-3xl border border-white/10 bg-[#15151c] p-10 text-center text-gray-400">
+            投稿が見つかりません。
+          </div>
+        </main>
+      </div>
     );
   }
 
   return (
-    <main
-      style={{
-        maxWidth: "900px",
-        margin: "0 auto",
-        padding: "24px 16px 80px",
-        color: "#111",
-        backgroundColor: "#f7f7f7",
-        minHeight: "100vh",
-      }}
-    >
-      <div style={{ marginBottom: "20px" }}>
-        <Link href="/" style={{ color: "#111", textDecoration: "none" }}>
-          ← 一覧に戻る
-        </Link>
-      </div>
+    <div className="min-h-screen bg-[#07070a] text-white">
+      <Header session={session} />
 
-      <article
-        style={{
-          backgroundColor: "#fff",
-          border: "1px solid #ddd",
-          borderRadius: "12px",
-          overflow: "hidden",
-          marginBottom: "24px",
-        }}
-      >
-        <img
-          src={post.image_url}
-          alt={post.title}
-          style={{
-            width: "100%",
-            maxHeight: "560px",
-            objectFit: "contain",
-            display: "block",
-            backgroundColor: "#eee",
-          }}
-        />
-
-        <div style={{ padding: "24px" }}>
-          <h1
-            style={{
-              fontSize: "30px",
-              fontWeight: "bold",
-              marginBottom: "12px",
-            }}
-          >
-            {post.title}
-          </h1>
-
-          <p
-            style={{
-              fontSize: "14px",
-              color: "#666",
-              marginBottom: "12px",
-            }}
-          >
-            投稿日時: {new Date(post.created_at).toLocaleString("ja-JP")}
-          </p>
-
-          <p
-            style={{
-              fontSize: "15px",
-              color: "#333",
-              marginBottom: "16px",
-              wordBreak: "break-word",
-            }}
-          >
-            タグ: {post.tags}
-          </p>
-
-          <div style={{ marginBottom: "20px" }}>
-            <h2
-              style={{
-                fontSize: "20px",
-                fontWeight: "bold",
-                marginBottom: "10px",
-              }}
-            >
-              プロンプト
-            </h2>
-            <div
-              style={{
-                whiteSpace: "pre-wrap",
-                lineHeight: 1.7,
-                backgroundColor: "#fafafa",
-                border: "1px solid #e5e5e5",
-                borderRadius: "10px",
-                padding: "16px",
-              }}
-            >
-              {post.prompt}
-            </div>
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              gap: "12px",
-              alignItems: "center",
-              flexWrap: "wrap",
-            }}
-          >
-            <button
-              onClick={handleLike}
-              disabled={liking}
-              style={{
-                padding: "12px 18px",
-                borderRadius: "8px",
-                border: "none",
-                backgroundColor: liking
-                  ? "#999"
-                  : likedByMe
-                  ? "#d11a2a"
-                  : "#111",
-                color: "#fff",
-                cursor: liking ? "not-allowed" : "pointer",
-                fontWeight: "bold",
-              }}
-            >
-              {liking
-                ? "送信中..."
-                : likedByMe
-                ? "♥ いいね済み（押すと解除）"
-                : "♡ いいね"}
-            </button>
-
-            <p style={{ margin: 0, fontSize: "16px", fontWeight: "bold" }}>
-              いいね数: {likesCount}
-            </p>
-
-            {session?.user?.id === post.user_id && (
-              <Link
-                href={`/posts/${post.id}/edit`}
-                style={{
-                  display: "inline-block",
-                  padding: "12px 18px",
-                  borderRadius: "8px",
-                  border: "1px solid #111",
-                  textDecoration: "none",
-                  color: "#111",
-                  fontWeight: "bold",
-                  backgroundColor: "#fff",
-                }}
-              >
-                編集する
-              </Link>
-            )}
-          </div>
-        </div>
-      </article>
-
-      <section
-        style={{
-          backgroundColor: "#fff",
-          border: "1px solid #ddd",
-          borderRadius: "12px",
-          padding: "24px",
-        }}
-      >
-        <h2 style={{ fontSize: "24px", fontWeight: "bold", marginBottom: "20px" }}>
-          コメント
-        </h2>
-
-        <form onSubmit={handleCommentSubmit} style={{ marginBottom: "24px" }}>
-          {!session?.user && (
-            <p style={{ marginBottom: "12px", color: "#666" }}>
-              コメントするにはログインが必要です。
-            </p>
-          )}
-
-          <textarea
-            value={commentText}
-            onChange={(e) => setCommentText(e.target.value)}
-            placeholder="コメントを入力"
-            disabled={commentSubmitting || !session?.user}
-            rows={4}
-            style={{
-              width: "100%",
-              padding: "12px",
-              border: "1px solid #ccc",
-              borderRadius: "8px",
-              fontSize: "14px",
-              backgroundColor: "#fff",
-              color: "#111",
-              resize: "vertical",
-              marginBottom: "12px",
-            }}
+      <main className="mx-auto max-w-7xl px-4 py-8 md:px-8">
+        <section className="relative mb-8 overflow-hidden rounded-3xl border border-white/10 bg-[#15151c] shadow-2xl shadow-black/30">
+          <img
+            src={post.image_url}
+            alt={post.title}
+            className="max-h-[720px] w-full object-contain bg-black"
           />
 
-          <button
-            type="submit"
-            disabled={commentSubmitting || !session?.user}
-            style={{
-              padding: "12px 18px",
-              borderRadius: "8px",
-              border: "none",
-              backgroundColor:
-                commentSubmitting || !session?.user ? "#999" : "#111",
-              color: "#fff",
-              cursor:
-                commentSubmitting || !session?.user ? "not-allowed" : "pointer",
-              fontWeight: "bold",
-            }}
-          >
-            {commentSubmitting ? "投稿中..." : "コメントする"}
-          </button>
-        </form>
+          <div className="border-t border-white/10 bg-[#15151c] p-5 md:p-8">
+            <p className="mb-2 text-xs font-bold uppercase tracking-[0.24em] text-red-300">
+              Realm Detail
+            </p>
 
-        {comments.length === 0 ? (
-          <p style={{ color: "#666", margin: 0 }}>まだコメントはありません。</p>
-        ) : (
-          <div style={{ display: "grid", gap: "12px" }}>
-            {comments.map((comment) => (
-              <article
-                key={comment.id}
-                style={{
-                  border: "1px solid #e5e5e5",
-                  borderRadius: "10px",
-                  padding: "16px",
-                  backgroundColor: "#fafafa",
-                }}
+            <h1 className="text-3xl font-black tracking-tight text-white md:text-5xl">
+              {post.title}
+            </h1>
+
+            <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-gray-400">
+              <span>❤️ {likeCount}</span>
+              <span>•</span>
+              <span>{formatDate(post.created_at)}</span>
+            </div>
+
+            {tags.length > 0 && (
+              <div className="mt-5 flex flex-wrap gap-2">
+                {tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-bold text-gray-300"
+                  >
+                    #{tag}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <div className="mt-6 flex flex-wrap gap-3">
+              <button
+                onClick={handleToggleLike}
+                disabled={likeSubmitting}
+                className={`rounded-full px-5 py-3 text-sm font-black transition disabled:opacity-50 ${
+                  liked
+                    ? "bg-[#b91c1c] text-white hover:bg-red-700"
+                    : "border border-white/10 bg-white/5 text-white hover:bg-white/10"
+                }`}
               >
-                <p
-                  style={{
-                    fontSize: "13px",
-                    color: "#666",
-                    marginBottom: "10px",
-                  }}
-                >
-                  {new Date(comment.created_at).toLocaleString("ja-JP")}
-                </p>
+                {liked ? "❤️ いいね済み" : "♡ いいね"}
+              </button>
 
-                <div
-                  style={{
-                    whiteSpace: "pre-wrap",
-                    lineHeight: 1.7,
-                    marginBottom: session?.user?.id === comment.user_id ? "12px" : "0",
-                  }}
-                >
-                  {comment.content}
-                </div>
+              {isOwner && (
+                <>
+                  <Link
+                    href={`/posts/${post.id}/edit`}
+                    className="rounded-full border border-white/10 bg-white/5 px-5 py-3 text-sm font-black text-white transition hover:bg-white/10"
+                  >
+                    編集
+                  </Link>
 
-                {session?.user?.id === comment.user_id && (
                   <button
-                    onClick={() => handleCommentDelete(comment.id)}
-                    style={{
-                      padding: "8px 12px",
-                      borderRadius: "8px",
-                      border: "none",
-                      backgroundColor: "#d11a2a",
-                      color: "#fff",
-                      cursor: "pointer",
-                      fontWeight: "bold",
-                    }}
+                    onClick={handleDeletePost}
+                    className="rounded-full border border-red-500/30 bg-red-950/30 px-5 py-3 text-sm font-black text-red-300 transition hover:bg-red-900/40"
                   >
                     削除
                   </button>
-                )}
-              </article>
-            ))}
+                </>
+              )}
+            </div>
           </div>
-        )}
-      </section>
-    </main>
+        </section>
+
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_380px]">
+          <section className="rounded-3xl border border-white/10 bg-[#15151c] p-5 shadow-2xl shadow-black/30 md:p-6">
+            <p className="text-xs font-bold uppercase tracking-[0.24em] text-red-300">
+              Prompt
+            </p>
+
+            <p className="mt-4 whitespace-pre-wrap text-sm leading-8 text-gray-300">
+              {post.prompt || "プロンプトはありません。"}
+            </p>
+          </section>
+
+          <section className="rounded-3xl border border-white/10 bg-[#15151c] p-5 shadow-2xl shadow-black/30 md:p-6">
+            <p className="text-xs font-bold uppercase tracking-[0.24em] text-red-300">
+              Comments
+            </p>
+
+            <form onSubmit={handleCreateComment} className="mt-5 space-y-3">
+              <textarea
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value)}
+                placeholder={
+                  session?.user
+                    ? "コメントを書く"
+                    : "コメントするにはログインしてください"
+                }
+                disabled={!session?.user || commentSubmitting}
+                rows={4}
+                className="w-full rounded-2xl border border-white/10 bg-[#0d0d12] px-4 py-3 text-sm text-white outline-none placeholder:text-gray-500 focus:border-red-500/70 disabled:opacity-50"
+              />
+
+              <button
+                type="submit"
+                disabled={!session?.user || commentSubmitting}
+                className="w-full rounded-2xl bg-[#b91c1c] px-5 py-3 text-sm font-black text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-400"
+              >
+                {commentSubmitting ? "投稿中..." : "コメントする"}
+              </button>
+            </form>
+
+            <div className="mt-6 space-y-4">
+              {comments.length === 0 ? (
+                <p className="rounded-2xl border border-white/10 bg-[#0d0d12] p-5 text-center text-sm text-gray-500">
+                  まだコメントがありません。
+                </p>
+              ) : (
+                comments.map((comment) => {
+                  const canDeleteComment =
+                    session?.user?.id && session.user.id === comment.user_id;
+
+                  return (
+                    <div
+                      key={comment.id}
+                      className="rounded-2xl border border-white/10 bg-[#0d0d12] p-4"
+                    >
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <p className="text-xs text-gray-500">
+                          {formatDate(comment.created_at)}
+                        </p>
+
+                        {canDeleteComment && (
+                          <button
+                            onClick={() => handleDeleteComment(comment.id)}
+                            className="text-xs font-bold text-red-300 hover:underline"
+                          >
+                            削除
+                          </button>
+                        )}
+                      </div>
+
+                      <p className="whitespace-pre-wrap text-sm leading-7 text-gray-300">
+                        {comment.content}
+                      </p>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </section>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function Header({ session }: { session: Session | null }) {
+  async function handleLogout() {
+    const { error } = await supabase.auth.signOut();
+
+    if (error) {
+      alert("ログアウトに失敗しました: " + error.message);
+      return;
+    }
+
+    window.location.href = "/";
+  }
+
+  return (
+    <header className="sticky top-0 z-50 border-b border-white/10 bg-[#0b0b10]/95 backdrop-blur">
+      <div className="flex h-16 items-center justify-between px-4 md:px-8">
+        <Link href="/" className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#b91c1c] text-sm font-black text-white shadow-lg shadow-red-900/40">
+            SR
+          </div>
+
+          <div className="leading-tight">
+            <div className="text-lg font-black tracking-tight text-white">
+              Sosaku Realm
+            </div>
+            <div className="text-[10px] uppercase tracking-[0.2em] text-red-200/60">
+              Prompt Creative Realm
+            </div>
+          </div>
+        </Link>
+
+        <div className="flex items-center gap-2">
+          <Link
+            href="/"
+            className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-bold text-gray-100 transition hover:bg-white/10"
+          >
+            ホームへ
+          </Link>
+
+          {session?.user && (
+            <>
+              <Link
+                href="/mypage"
+                className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-bold text-gray-100 transition hover:bg-white/10"
+              >
+                マイページ
+              </Link>
+
+              <button
+                onClick={handleLogout}
+                className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-bold text-gray-100 transition hover:bg-white/10"
+              >
+                ログアウト
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </header>
   );
 }

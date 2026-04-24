@@ -36,6 +36,7 @@ export default function Home() {
   const [password, setPassword] = useState("");
   const [authMode, setAuthMode] = useState<"login" | "signup">("login");
   const [authSubmitting, setAuthSubmitting] = useState(false);
+  const [showPostForm, setShowPostForm] = useState(false);
 
   const fetchPosts = async () => {
     const { data, error } = await supabase
@@ -163,18 +164,27 @@ export default function Home() {
           return likeB - likeA;
         }
 
-        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        return (
+          new Date(b.created_at).getTime() -
+          new Date(a.created_at).getTime()
+        );
       });
 
       return copied;
     }
 
     copied.sort((a, b) => {
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      return (
+        new Date(b.created_at).getTime() -
+        new Date(a.created_at).getTime()
+      );
     });
 
     return copied;
   }, [filteredPosts, likesCountMap, sortType]);
+
+  const heroPost = sortedPosts[0];
+  const gridPosts = sortedPosts;
 
   const handleAuth = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -254,402 +264,380 @@ export default function Home() {
   };
 
   return (
-    <main
-      style={{
-        maxWidth: "960px",
-        margin: "0 auto",
-        padding: "32px 16px 80px",
-        backgroundColor: "#f7f7f7",
-        minHeight: "100vh",
-      }}
-    >
-      <h1 style={{ fontSize: "32px", marginBottom: "24px" }}>AI画像投稿アプリ</h1>
+    <div className="min-h-screen bg-[#07070a] text-white">
+      <header className="sticky top-0 z-50 border-b border-white/10 bg-[#0b0b10]/95 backdrop-blur">
+        <div className="flex h-16 items-center justify-between px-4 md:px-8">
+          <div className="flex items-center gap-4">
+            <button className="rounded-full p-2 text-gray-300 transition hover:bg-white/10 hover:text-white">
+              ☰
+            </button>
 
-      <section
-        style={{
-          border: "1px solid #ddd",
-          borderRadius: "12px",
-          padding: "20px",
-          marginBottom: "32px",
-          backgroundColor: "#fff",
-        }}
-      >
-        <h2 style={{ fontSize: "24px", marginBottom: "16px" }}>アカウント</h2>
+            <Link href="/" className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#b91c1c] text-sm font-black text-white shadow-lg shadow-red-900/40">
+                SR
+              </div>
 
-        {authLoading ? (
-          <p>認証状態を確認中...</p>
-        ) : session?.user ? (
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              gap: "12px",
-              flexWrap: "wrap",
-            }}
-          >
-            <p style={{ margin: 0 }}>ログイン中: {session.user.email}</p>
-
-            <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-              <Link
-                href="/mypage"
-                style={{
-                  textDecoration: "none",
-                  color: "#111",
-                  fontWeight: "bold",
-                }}
-              >
-                マイページ
-              </Link>
-
-              <button
-                onClick={handleLogout}
-                style={{
-                  padding: "10px 14px",
-                  borderRadius: "8px",
-                  border: "1px solid #111",
-                  background: "#fff",
-                  color: "#111",
-                  cursor: "pointer",
-                  fontSize: "14px",
-                  fontWeight: "bold",
-                }}
-              >
-                ログアウト
-              </button>
-            </div>
+              <div className="leading-tight">
+                <div className="text-lg font-black tracking-tight text-white">
+                  Sosaku Realm
+                </div>
+                <div className="text-[10px] uppercase tracking-[0.2em] text-red-200/60">
+                  Prompt Creative Realm
+                </div>
+              </div>
+            </Link>
           </div>
-        ) : (
-          <>
-            <div style={{ display: "flex", gap: "12px", marginBottom: "16px" }}>
-              <button
-                type="button"
-                onClick={() => setAuthMode("login")}
-                style={{
-                  padding: "10px 14px",
-                  borderRadius: "8px",
-                  border: authMode === "login" ? "1px solid #111" : "1px solid #ccc",
-                  background: authMode === "login" ? "#111" : "#fff",
-                  color: authMode === "login" ? "#fff" : "#111",
-                  cursor: "pointer",
-                  fontSize: "14px",
-                  fontWeight: "bold",
-                }}
-              >
-                ログイン
-              </button>
 
-              <button
-                type="button"
-                onClick={() => setAuthMode("signup")}
-                style={{
-                  padding: "10px 14px",
-                  borderRadius: "8px",
-                  border: authMode === "signup" ? "1px solid #111" : "1px solid #ccc",
-                  background: authMode === "signup" ? "#111" : "#fff",
-                  color: authMode === "signup" ? "#fff" : "#111",
-                  cursor: "pointer",
-                  fontSize: "14px",
-                  fontWeight: "bold",
-                }}
-              >
-                新規登録
-              </button>
-            </div>
+          <div className="mx-6 hidden max-w-2xl flex-1 md:block">
+            <input
+              type="text"
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              placeholder="タイトル・タグ・プロンプトで検索"
+              className="w-full rounded-full border border-white/10 bg-[#17171f] px-5 py-2 text-sm text-white outline-none placeholder:text-gray-500 focus:border-red-500/70"
+            />
+          </div>
 
-            <form onSubmit={handleAuth}>
-              <div style={{ marginBottom: "16px" }}>
-                <label
-                  htmlFor="email"
-                  style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}
+          <div className="flex items-center gap-2">
+            {session?.user && (
+              <button
+                onClick={() => setShowPostForm((prev) => !prev)}
+                className="rounded-full bg-[#b91c1c] px-4 py-2 text-sm font-bold text-white transition hover:bg-red-700"
+              >
+                投稿する
+              </button>
+            )}
+
+            {session?.user ? (
+              <>
+                <Link
+                  href="/mypage"
+                  className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-bold text-gray-100 transition hover:bg-white/10"
                 >
-                  メールアドレス
-                </label>
-                <input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="example@email.com"
-                  disabled={authSubmitting}
-                  style={{
-                    width: "100%",
-                    padding: "10px",
-                    border: "1px solid #ccc",
-                    borderRadius: "8px",
-                    fontSize: "14px",
-                    backgroundColor: "#fff",
-                    color: "#111",
-                    boxSizing: "border-box",
-                  }}
-                />
-              </div>
+                  マイページ
+                </Link>
 
-              <div style={{ marginBottom: "16px" }}>
-                <label
-                  htmlFor="password"
-                  style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}
+                <button
+                  onClick={handleLogout}
+                  className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-bold text-gray-100 transition hover:bg-white/10"
                 >
-                  パスワード
-                </label>
-                <input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="6文字以上推奨"
-                  disabled={authSubmitting}
-                  style={{
-                    width: "100%",
-                    padding: "10px",
-                    border: "1px solid #ccc",
-                    borderRadius: "8px",
-                    fontSize: "14px",
-                    backgroundColor: "#fff",
-                    color: "#111",
-                    boxSizing: "border-box",
-                  }}
-                />
-              </div>
+                  ログアウト
+                </button>
+              </>
+            ) : (
+              <span className="hidden text-sm text-gray-400 md:inline">
+                未ログイン
+              </span>
+            )}
+          </div>
+        </div>
 
-              <button
-                type="submit"
-                disabled={authSubmitting}
-                style={{
-                  padding: "12px 18px",
-                  borderRadius: "8px",
-                  border: "none",
-                  backgroundColor: authSubmitting ? "#999" : "#111",
-                  color: "#fff",
-                  cursor: authSubmitting ? "not-allowed" : "pointer",
-                  fontWeight: "bold",
-                }}
-              >
-                {authSubmitting
-                  ? authMode === "signup"
-                    ? "登録中..."
-                    : "ログイン中..."
-                  : authMode === "signup"
-                  ? "新規登録する"
-                  : "ログインする"}
-              </button>
-            </form>
-          </>
-        )}
-      </section>
-
-      <section style={{ marginBottom: "32px" }}>
-        <h2 style={{ fontSize: "24px", marginBottom: "16px" }}>新規投稿</h2>
-
-        {!session?.user ? (
-          <p style={{ color: "#666" }}>投稿するにはログインが必要です。</p>
-        ) : (
-          <PostForm userId={session.user.id} onPostCreated={refreshData} />
-        )}
-      </section>
-
-      <section
-        style={{
-          border: "1px solid #ddd",
-          borderRadius: "12px",
-          padding: "20px",
-          marginBottom: "32px",
-          backgroundColor: "#fff",
-        }}
-      >
-        <h2 style={{ fontSize: "24px", marginBottom: "16px" }}>検索・絞り込み</h2>
-
-        <div
-          style={{
-            display: "grid",
-            gap: "12px",
-            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-          }}
-        >
+        <div className="border-t border-white/10 px-4 py-3 md:hidden">
           <input
             type="text"
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
-            placeholder="タイトル・タグ・プロンプトで検索"
-            style={{
-              width: "100%",
-              padding: "10px",
-              border: "1px solid #ccc",
-              borderRadius: "8px",
-              fontSize: "14px",
-              backgroundColor: "#fff",
-              color: "#111",
-              boxSizing: "border-box",
-            }}
+            placeholder="検索"
+            className="w-full rounded-full border border-white/10 bg-[#17171f] px-5 py-2 text-sm text-white outline-none placeholder:text-gray-500"
           />
-
-          <select
-            value={selectedTag}
-            onChange={(e) => setSelectedTag(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "10px",
-              border: "1px solid #ccc",
-              borderRadius: "8px",
-              fontSize: "14px",
-              backgroundColor: "#fff",
-              color: "#111",
-              boxSizing: "border-box",
-            }}
-          >
-            {allTags.map((tag) => (
-              <option key={tag} value={tag}>
-                {tag}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={sortType}
-            onChange={(e) => setSortType(e.target.value as SortType)}
-            style={{
-              width: "100%",
-              padding: "10px",
-              border: "1px solid #ccc",
-              borderRadius: "8px",
-              fontSize: "14px",
-              backgroundColor: "#fff",
-              color: "#111",
-              boxSizing: "border-box",
-            }}
-          >
-            <option value="new">新着順</option>
-            <option value="likes">いいね順</option>
-          </select>
         </div>
-      </section>
+      </header>
 
-      <section>
-        <h2 style={{ fontSize: "24px", marginBottom: "16px" }}>投稿一覧</h2>
+      <div className="flex">
+        <aside className="hidden w-60 shrink-0 border-r border-white/10 bg-[#0b0b10] p-4 md:block">
+          <nav className="space-y-2">
+            <Link
+              href="/"
+              className="block rounded-xl bg-white/10 px-4 py-3 text-sm font-bold text-white"
+            >
+              ホーム
+            </Link>
 
-        {sortedPosts.length === 0 ? (
-          <p>投稿がありません。</p>
-        ) : (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-              gap: "20px",
-            }}
-          >
-            {sortedPosts.map((post) => {
-              const isOwner = session?.user?.id === post.user_id;
-              const likeCount = likesCountMap[post.id] || 0;
+            <button
+              onClick={() => setSortType("new")}
+              className={`block w-full rounded-xl px-4 py-3 text-left text-sm font-bold transition hover:bg-white/10 ${
+                sortType === "new"
+                  ? "bg-[#b91c1c] text-white"
+                  : "text-gray-300"
+              }`}
+            >
+              新着
+            </button>
 
-              return (
-                <article
-                  key={post.id}
-                  style={{
-                    border: "1px solid #ddd",
-                    borderRadius: "12px",
-                    overflow: "hidden",
-                    backgroundColor: "#fff",
-                  }}
-                >
+            <button
+              onClick={() => setSortType("likes")}
+              className={`block w-full rounded-xl px-4 py-3 text-left text-sm font-bold transition hover:bg-white/10 ${
+                sortType === "likes"
+                  ? "bg-[#b91c1c] text-white"
+                  : "text-gray-300"
+              }`}
+            >
+              人気
+            </button>
+
+            <Link
+              href="/mypage"
+              className="block rounded-xl px-4 py-3 text-sm font-bold text-gray-300 transition hover:bg-white/10 hover:text-white"
+            >
+              マイページ
+            </Link>
+          </nav>
+
+          <div className="mt-8 rounded-2xl border border-white/10 bg-[#15151c] p-4 text-sm">
+            <p className="mb-2 font-bold text-white">アカウント</p>
+
+            {authLoading ? (
+              <p className="text-gray-400">確認中...</p>
+            ) : session?.user ? (
+              <p className="break-all text-gray-400">{session.user.email}</p>
+            ) : (
+              <p className="text-gray-400">ログインしてください</p>
+            )}
+          </div>
+        </aside>
+
+        <main className="min-w-0 flex-1">
+          {heroPost && (
+            <section className="relative min-h-[360px] overflow-hidden border-b border-white/10 md:min-h-[460px]">
+              <img
+                src={heroPost.image_url}
+                alt={heroPost.title}
+                className="absolute inset-0 h-full w-full object-cover opacity-45"
+              />
+
+              <div className="absolute inset-0 bg-gradient-to-r from-[#07070a] via-[#07070a]/85 to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#07070a] via-transparent to-[#07070a]/30" />
+
+              <div className="relative z-10 flex min-h-[360px] max-w-4xl flex-col justify-end px-5 pb-10 pt-20 md:min-h-[460px] md:px-10">
+                <p className="mb-3 text-xs font-bold uppercase tracking-[0.24em] text-red-300">
+                  Featured Realm
+                </p>
+
+                <h1 className="max-w-3xl text-4xl font-black tracking-tight text-white md:text-6xl">
+                  {heroPost.title}
+                </h1>
+
+                <p className="mt-4 max-w-2xl line-clamp-3 text-sm leading-7 text-gray-300 md:text-base">
+                  {heroPost.prompt}
+                </p>
+
+                <div className="mt-6 flex flex-wrap items-center gap-3">
                   <Link
-                    href={`/posts/${post.id}`}
-                    style={{ textDecoration: "none", color: "inherit" }}
+                    href={`/posts/${heroPost.id}`}
+                    className="rounded-full bg-white px-6 py-3 text-sm font-black text-black transition hover:bg-gray-200"
                   >
-                    <img
-                      src={post.image_url}
-                      alt={post.title}
-                      style={{
-                        width: "100%",
-                        aspectRatio: "1 / 1",
-                        objectFit: "cover",
-                        display: "block",
-                        backgroundColor: "#eee",
-                      }}
-                    />
+                    詳細・コメントを見る
                   </Link>
 
-                  <div style={{ padding: "16px" }}>
-                    <Link
-                      href={`/posts/${post.id}`}
-                      style={{ textDecoration: "none", color: "inherit" }}
-                    >
-                      <h3 style={{ margin: "0 0 8px", fontSize: "18px" }}>{post.title}</h3>
-                    </Link>
+                  <span className="rounded-full border border-white/10 bg-black/30 px-4 py-3 text-sm font-bold text-white backdrop-blur">
+                    ❤️ {likesCountMap[heroPost.id] || 0}
+                  </span>
+                </div>
+              </div>
+            </section>
+          )}
 
-                    <p style={{ margin: "0 0 8px", color: "#666", fontSize: "14px" }}>
-                      いいね: {likeCount}
-                    </p>
+          <div className="p-4 md:p-8">
+            {!session?.user && (
+              <section className="mb-8 rounded-3xl border border-white/10 bg-[#15151c] p-5 shadow-2xl shadow-black/30">
+                <h2 className="mb-4 text-xl font-black text-white">
+                  アカウント
+                </h2>
 
-                    <p style={{ margin: "0 0 12px", color: "#444", fontSize: "14px" }}>
-                      {post.tags}
-                    </p>
+                <div className="mb-4 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setAuthMode("login")}
+                    className={`rounded-full px-4 py-2 text-sm font-bold ${
+                      authMode === "login"
+                        ? "bg-[#b91c1c] text-white"
+                        : "border border-white/10 bg-white/5 text-gray-300"
+                    }`}
+                  >
+                    ログイン
+                  </button>
 
-                    <p
-                      style={{
-                        margin: "0 0 12px",
-                        color: "#666",
-                        fontSize: "13px",
-                        lineHeight: 1.6,
-                        display: "-webkit-box",
-                        WebkitLineClamp: 3,
-                        WebkitBoxOrient: "vertical",
-                        overflow: "hidden",
-                      }}
-                    >
-                      {post.prompt}
-                    </p>
+                  <button
+                    type="button"
+                    onClick={() => setAuthMode("signup")}
+                    className={`rounded-full px-4 py-2 text-sm font-bold ${
+                      authMode === "signup"
+                        ? "bg-[#b91c1c] text-white"
+                        : "border border-white/10 bg-white/5 text-gray-300"
+                    }`}
+                  >
+                    新規登録
+                  </button>
+                </div>
 
-                    <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-                      <Link
-                        href={`/posts/${post.id}`}
-                        style={{
-                          textDecoration: "none",
-                          color: "#111",
-                          fontWeight: "bold",
-                          fontSize: "14px",
-                        }}
-                      >
-                        詳細を見る
-                      </Link>
+                <form onSubmit={handleAuth} className="grid gap-3 md:grid-cols-3">
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="メールアドレス"
+                    disabled={authSubmitting}
+                    className="rounded-xl border border-white/10 bg-[#0d0d12] px-4 py-3 text-sm text-white outline-none placeholder:text-gray-500"
+                  />
 
-                      {isOwner && (
-                        <>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="パスワード"
+                    disabled={authSubmitting}
+                    className="rounded-xl border border-white/10 bg-[#0d0d12] px-4 py-3 text-sm text-white outline-none placeholder:text-gray-500"
+                  />
+
+                  <button
+                    type="submit"
+                    disabled={authSubmitting}
+                    className="rounded-xl bg-[#b91c1c] px-4 py-3 text-sm font-bold text-white transition hover:bg-red-700 disabled:bg-gray-600"
+                  >
+                    {authSubmitting
+                      ? authMode === "signup"
+                        ? "登録中..."
+                        : "ログイン中..."
+                      : authMode === "signup"
+                      ? "新規登録する"
+                      : "ログインする"}
+                  </button>
+                </form>
+              </section>
+            )}
+
+            {session?.user && showPostForm && (
+              <section className="mb-8 rounded-3xl border border-white/10 bg-[#15151c] p-5 shadow-2xl shadow-black/30">
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className="text-xl font-black text-white">新規投稿</h2>
+                  <button
+                    onClick={() => setShowPostForm(false)}
+                    className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-sm text-gray-200 hover:bg-white/10"
+                  >
+                    閉じる
+                  </button>
+                </div>
+
+                <PostForm userId={session.user.id} onPostCreated={refreshData} />
+              </section>
+            )}
+
+            <section className="mb-8">
+              <div className="mb-5 flex flex-wrap items-center gap-3">
+                {allTags.map((tag) => (
+                  <button
+                    key={tag}
+                    onClick={() => setSelectedTag(tag)}
+                    className={`rounded-full px-4 py-2 text-sm font-bold transition ${
+                      selectedTag === tag
+                        ? "bg-[#b91c1c] text-white"
+                        : "border border-white/10 bg-[#15151c] text-gray-300 hover:bg-white/10 hover:text-white"
+                    }`}
+                  >
+                    {tag}
+                  </button>
+                ))}
+
+                <select
+                  value={sortType}
+                  onChange={(e) => setSortType(e.target.value as SortType)}
+                  className="ml-auto rounded-full border border-white/10 bg-[#15151c] px-4 py-2 text-sm font-bold text-white outline-none"
+                >
+                  <option value="new">新着順</option>
+                  <option value="likes">いいね順</option>
+                </select>
+              </div>
+
+              <div className="mb-6 flex items-end justify-between">
+                <div>
+                  <h2 className="text-2xl font-black text-white">
+                    Realm Feed
+                  </h2>
+                  <p className="text-sm text-gray-400">
+                    プロンプトから生まれた創作を見つける場所
+                  </p>
+                </div>
+
+                <p className="text-sm text-gray-500">{sortedPosts.length}件</p>
+              </div>
+
+              {sortedPosts.length === 0 ? (
+                <div className="rounded-3xl border border-white/10 bg-[#15151c] p-10 text-center text-gray-400">
+                  投稿がありません。
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-x-5 gap-y-10 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                  {gridPosts.map((post) => {
+                    const isOwner = session?.user?.id === post.user_id;
+                    const likeCount = likesCountMap[post.id] || 0;
+
+                    return (
+                      <article key={post.id} className="group">
+                        <Link
+                          href={`/posts/${post.id}`}
+                          className="block overflow-hidden rounded-2xl bg-[#18181d] shadow-xl shadow-black/30"
+                        >
+                          <img
+                            src={post.image_url}
+                            alt={post.title}
+                            className="aspect-[16/10] w-full object-cover transition duration-300 group-hover:scale-[1.04]"
+                          />
+                        </Link>
+
+                        <div className="mt-3">
                           <Link
-                            href={`/posts/${post.id}/edit`}
-                            style={{
-                              textDecoration: "none",
-                              color: "#111",
-                              fontWeight: "bold",
-                              fontSize: "14px",
-                            }}
+                            href={`/posts/${post.id}`}
+                            className="line-clamp-2 text-base font-black text-white hover:underline"
                           >
-                            編集
+                            {post.title}
                           </Link>
 
-                          <button
-                            onClick={() => handleDelete(post.id)}
-                            style={{
-                              border: "none",
-                              background: "transparent",
-                              padding: 0,
-                              color: "#c00",
-                              cursor: "pointer",
-                              fontWeight: "bold",
-                              fontSize: "14px",
-                            }}
-                          >
-                            削除
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </article>
-              );
-            })}
+                          <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-gray-400">
+                            <span>❤️ {likeCount}</span>
+                            <span>•</span>
+                            <span className="line-clamp-1">{post.tags}</span>
+                          </div>
+
+                          <p className="mt-2 line-clamp-2 text-sm leading-6 text-gray-500">
+                            {post.prompt}
+                          </p>
+
+                          <div className="mt-3 flex flex-wrap gap-3 text-sm">
+                            <Link
+                              href={`/posts/${post.id}`}
+                              className="font-bold text-red-300 hover:text-red-200 hover:underline"
+                            >
+                              詳細・コメント
+                            </Link>
+
+                            {isOwner && (
+                              <>
+                                <Link
+                                  href={`/posts/${post.id}/edit`}
+                                  className="font-bold text-gray-300 hover:text-white hover:underline"
+                                >
+                                  編集
+                                </Link>
+
+                                <button
+                                  onClick={() => handleDelete(post.id)}
+                                  className="font-bold text-red-400 hover:text-red-300 hover:underline"
+                                >
+                                  削除
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
           </div>
-        )}
-      </section>
-    </main>
+        </main>
+      </div>
+    </div>
   );
 }
